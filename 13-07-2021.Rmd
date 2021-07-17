@@ -1,0 +1,122 @@
+---
+title: "13-07-2021"
+author: "Chanya"
+date: "7/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages, warning=TRUE, include=FALSE}
+if(!require(pacman))install.packages("pacman")
+
+pacman::p_load('tidyverse',  'gapminder',
+               'forcats', 'scales')
+```
+
+```{r data, include=FALSE}
+scoobydoo <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-07-13/scoobydoo.csv')
+```
+
+# Quick overview 
+```{r}
+library(skimr)
+skim(scoobydoo)
+```
+## Will explore...
+1. Top-rated episodes from IMDB? 
+2. Who caught the most?
+3. Most common motive? 
+
+### Transforming data
+https://www.geeksforgeeks.org/how-to-convert-dataframe-column-from-character-to-numeric-in-r/
+
+```{r}
+scoobydoo <- scoobydoo %>% 
+  select(series_name:date_aired, starts_with("caught_"), starts_with("setting_"), motive)
+scoobydoo <- transform(scoobydoo,
+                             imdb = as.numeric(imdb),engagement = as.numeric(engagement), caught_fred = as.logical(caught_fred), caught_daphnie = as.logical(caught_daphnie), caught_velma = as.logical(caught_velma), caught_shaggy = as.logical(caught_shaggy), caught_scooby = as.logical(caught_scooby), setting_terrain = as.factor(setting_terrain), setting_country_state = as.factor(setting_country_state), motive = as.factor(motive))
+sapply(scoobydoo, class)
+```
+
+### Top-rated episodes 
+```{r}
+hist(scoobydoo$imdb)
+skim(scoobydoo$imdb)
+```
+
+Find the series that have scores above 75th percentile (7.7)
+
+```{r}
+top <- scoobydoo %>%
+  filter(imdb >= 7.7) %>%
+  arrange(desc(imdb))
+head(top, 10)
+```
+```{r}
+ggplot(top, aes(x=series_name,y=imdb, color=series_name)) +
+  geom_point() +
+  coord_flip() +
+  labs(title="Top-rated Scoobydoo series according to IMDB scores",subtitle="no. of dots = no. of episodes under specific series") +
+  theme(legend.position = "none",plot.title = element_text(lineheight=.8, face="bold",hjust=3))
+ggsave("imdb.png")
+```
+According to the plot, I would recommend Supernatural movie and Scooby-Doo Mystery Incorporated series to someone new to Scoobydoo! 
+
+### Who caught the most? 
+According to the data, who contribute the most to the number of catch? 
+https://intellipaat.com/community/5004/how-to-count-true-values-in-r
+https://stackoverflow.com/questions/6778908/transpose-a-data-frame
+https://www.geeksforgeeks.org/change-column-name-of-a-given-dataframe-in-r/
+https://www.dummies.com/programming/r/how-to-create-a-data-frame-from-a-matrix-in-r/
+```{r}
+caught <- scoobydoo %>%
+  summarize(
+    fred = length(caught_fred[caught_fred == TRUE]), 
+    daphnie = length(caught_daphnie[caught_daphnie == TRUE]),
+    velma = length(caught_velma[caught_velma == TRUE]),
+    shaggy = length(caught_shaggy[caught_shaggy == TRUE]),
+    scooby = length(caught_scooby[caught_scooby == TRUE]),
+    other = length(caught_other[caught_other == TRUE])
+  )
+## Transpose and change column name 
+caught <- t(caught)
+caught <-  as.data.frame(caught)
+class(caught)
+caught <- rownames_to_column(caught, var = "name") %>% as_tibble()
+colnames(caught) <- c("name","number")
+head(caught)
+```
+https://bbc.github.io/rcookbook/#do_something_else_entirely
+```{r}
+caught_plot <- ggplot(caught, aes(x = reorder(name, number), y = number)) +
+  geom_bar(stat="identity", position="identity", fill="#1380A1") +
+  geom_hline(yintercept = 0, size = 1, colour="#333333") +
+  coord_flip() +
+  labs(title="Who caught the most?") +
+  theme(panel.grid.major.x = element_line(color="#cbcbcb"), 
+        panel.grid.major.y=element_blank(),plot.title = element_text(lineheight=.8, face="bold"),axis.title.y = element_blank())
+caught_plot
+ggsave("caught.png")
+```
+
+### Most common motive 
+```{r}
+motive <- scoobydoo %>%
+  count(motive)
+```
+
+```{r}
+motive_plot <- ggplot(motive, aes(x=reorder(motive,n), y=n)) +
+  geom_bar(stat="identity",fill="plum3") +
+  coord_flip() +
+  labs(title="What is the most common motive?") +
+  theme(panel.grid.major.x = element_line(color="#cbcbcb"), 
+        panel.grid.major.y=element_blank(),plot.title = element_text(lineheight=.8, face="bold"),axis.title.y = element_blank())
+ggsave("motive.png")
+```
+
+### Data Source 
+https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-07-13/readme.md
