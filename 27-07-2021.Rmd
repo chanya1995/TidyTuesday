@@ -1,0 +1,165 @@
+---
+title: "27-07-2021"
+author: "Chanya"
+date: "8/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages, echo=TRUE, warning=TRUE}
+if(!require(pacman))install.packages("pacman")
+pacman::p_load('tidyverse',  'gapminder',
+               'forcats', 'scales','plotly')
+```
+
+```{r read in dataset, message=FALSE, warning=FALSE}
+olympics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-07-27/olympics.csv')
+```
+
+## History of Olympic Games
+https://www.scholastic.com/teachers/articles/teaching-content/history-olympic-games/
+
+## Badminton 
+Recently, I enjoy watching the Olympic Games Tokyo 2020, and I am most addicted to badminton games. Therefore, I am interested in how this sport has evolved over time and which country has won the most medals. 
+
+#### Q) Which country won the most badminton medals? 
+```{r message=FALSE, warning=FALSE}
+badminton <- olympics %>%
+  filter(sport=="Badminton", medal != "NA") %>%
+  group_by(noc,medal) %>%
+  summarise(
+    number = length(medal)
+  ) 
+view(badminton)
+
+# order Team by total medal count
+# https://www.kaggle.com/heesoo37/olympic-history-data-a-thorough-analysis/report
+levs_badminton <- badminton %>%
+  group_by(noc) %>%
+  summarize(Total=sum(number)) %>%
+  arrange(Total) %>%
+  select(noc)
+badminton$noc <- factor(badminton$noc, levels=levs_badminton$noc)
+# https://www.stat.berkeley.edu/~s133/factors.html
+badminton$medal <- factor(badminton$medal, labels=c("Gold","Silver","Bronze"))
+```
+```{r message=FALSE, warning=FALSE}
+ggplot(badminton, aes(x=noc,y=number,fill=medal)) +
+  geom_col() +
+  theme_bw() +
+  coord_flip() + 
+  scale_fill_manual(values=c("#D6AF36","#D7D7D7","#A77044")) +
+  xlab("") +
+  ylab("") +
+  ggtitle("China won most Badminton medals in the Olympic history") +
+  labs(caption="source:www.sports-reference.com")
+  theme(plot.title = element_text(hjust = 0.5),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(colour = "#D3D3D3"),
+        panel.grid.minor = element_line(colour = NULL),
+        text=element_text(size=14,  family="Gill Sans"))
+ggsave("Badminton.png")
+```
+
+#### Creating a map for countries with most badminton champions 
+https://www.kaggle.com/heesoo37/olympic-history-data-a-thorough-analysis/report
+```{r message=FALSE, warning=FALSE}
+# Load data file matching NOCs with mao regions (countries)
+# https://raw.githubusercontent.com/rgriff23/Olympic_history/master/data/noc_regions.csv
+noc <- read_csv("https://raw.githubusercontent.com/rgriff23/Olympic_history/master/data/noc_regions.csv")
+# raname column from NOC to noc
+# http://www.cookbook-r.com/Manipulating_data/Renaming_columns_in_a_data_frame/
+names(noc)[1] <- "noc"
+# Add regions to data and remove missing points
+data_regions <- badminton %>% 
+  left_join(noc,by="noc") %>%
+  filter(!is.na(region))
+```
+
+```{r message=FALSE, warning=FALSE}
+total_badminton <- data_regions %>%
+  group_by(region) %>%
+  summarize(total = sum(number)) %>%
+  arrange(desc(total))
+```
+
+Data for mapping
+```{r}
+world <- map_data("world")
+mapdat <- tibble(region=unique(world$region))
+mapdat <- mapdat %>% 
+  left_join(total_badminton, by="region")
+mapdat$total[is.na(mapdat$total)] <- 0
+world <- left_join(world, mapdat, by="region")
+```
+
+Plotting 
+```{r message=FALSE, warning=FALSE}
+badminton_map <- ggplot(world, aes(x = long, y = lat, group = group)) +
+  geom_polygon(aes(fill = total)) +
+  labs(title = "Most badminton medalists come from Asia",
+       caption="source:www.sports-reference.com",
+       x = NULL, y=NULL) +
+  theme(axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        panel.background = element_rect(fill = "white"),
+        plot.title = element_text(hjust = 0.5),
+        text=element_text(family="Gill Sans"),
+        legend.position="top") +
+  guides(fill=guide_colourbar(title="total medals")) +
+  scale_fill_gradient(low="grey",high="red")
+```
+
+Most countries seem to be located on the East. 
+
+```{r}
+#install and load in ggforce for facet zoom
+library(ggforce)
+```
+
+Zoom in...
+```{r echo=TRUE}
+badminton_map +
+  facet_zoom(xlim = c(70, 140)) 
+ggsave("badminton_zoom.png")
+```
+
+#### Q) Gold medal distribution across time (1992-2016)
+```{r}
+summer <- olympics %>%
+  select(noc,games:medal) %>%
+  filter(sport=="Badminton", medal == "Gold") %>%
+  arrange(year) %>%
+  group_by(year,event,medal,noc) %>%
+  count()
+```
+
+```{r}
+ggplot(summer, aes(x=year,fill=noc)) +
+  geom_bar() +
+  theme_classic() +
+  labs(title="Only these six countries could take badminton gold medals home",subtitle="gold medal distribution across 5 events from 1992 to 2016", caption="source:www.sports-reference.com",y=NULL) +
+  scale_x_continuous(name ="year",breaks=unique(summer$year)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 1),
+        text=element_text(family="Gill Sans"),
+        legend.position="top",
+        legend.title = element_blank()) +
+  guides(colour = guide_legend(nrow = 1))
+ggsave("gold.png")
+```
+
+#### Special thanks to the below sources on how to beautify plots
+* http://www.sthda.com/english/wiki/ggplot2-axis-ticks-a-guide-to-customize-tick-marks-and-labels#change-axis-lines
+* http://www.sthda.com/english/wiki/ggplot2-colors-how-to-change-colors-automatically-and-manually#use-rcolorbrewer-palettes
+* http://www.sthda.com/english/wiki/ggplot2-legend-easy-steps-to-change-the-position-and-the-appearance-of-a-graph-legend-in-r-software
+* https://towardsdatascience.com/how-to-make-stunning-bar-charts-in-r-a-complete-guide-with-ggplot2-c8f3b87de4d1
+
+#### Source
+* https://www.kaggle.com/heesoo37/olympic-history-data-a-thorough-analysis/report
+* https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-07-27/readme.md
+
